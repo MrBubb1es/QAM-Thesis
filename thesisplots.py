@@ -165,4 +165,124 @@ def crb_demonstration(k_vals, snr):
 
     plt.show()
 
+# Not a Fig, used as an interactive plot
+#  input: qam - the QAM constellation used
+#         noise - AWGN to be added to the received signals. Normally done in get_received_stream, but precalculated here
+#         sent_stream - np array of all signals from QAM that were sent. Used to calculate received signals
+#         snr - SNR used to calculate noise. Fixed in this function
+#         phase_offset - the actual phase offset of the data in degrees
+#         theta_guess - the angle to correct the received stream by to see the affect of different correction angles
+#  output: None, displays a plot of both the data received and the log-likelihood
+def log_likelihood_demonstration(qam, noise, sent_stream, snr, phase_offset, theta_guess):
+    received_stream = rotated(sent_stream, phase_offset) + noise
+    corrected_stream = rotated(received_stream, -theta_guess)
+
+    theta_vals = np.arange(0,91,2)
+    log_likelihood_vals = get_log_likelihood_arr(qam, received_stream, QAM32_SNR_LOW, theta_vals)
+
+    fig, axs = plt.subplots(1,2)
+    signals_fig, log_likelihood_fig = axs
+
+    fig.set_size_inches(10,5)
+
+    signals_fig.set_title(f"Received Signals ($\\theta$ = {phase_offset} degrees")
+    signals_fig.set_xlim(-1.5, 1.5)
+    signals_fig.set_ylim(-1.5, 1.5)
+    signals_fig.scatter(received_stream.real, received_stream.imag, marker="+", s=16)
+    signals_fig.scatter(corrected_stream.real, corrected_stream.imag, marker="+", s=16)
+    signals_fig.scatter(qam.real, qam.imag, marker="+", s=16)
+    signals_fig.legend(["Received Signals", f"Corrected by {theta_guess} deg", "32-QAM Symbols"], bbox_to_anchor=[.5,-.1])
+
+    log_likelihood_fig.set_title(f"Log-Likelihood Function for 32-QAM Constellation")
+    log_likelihood_fig.set_ylabel("Log-likelihood")
+    log_likelihood_fig.set_xlabel("Theta in degrees")
+    log_likelihood_fig.set_xlim(0,90)
+    log_likelihood_fig.plot(theta_vals, log_likelihood_vals, zorder=1)
+    log_likelihood_fig.scatter(theta_guess, get_log_likelihood(qam, received_stream, snr, theta_guess), c="orange", zorder=2)
+
+    fig.show()
+
+
+
 # Display Fig 3
+# Graphs a typical log likelihood function for a 128-QAM constellation
+def graph_log_likelihood():
+    snr = QAM128_SNR_LOW # It is unknown what value was chosen for this plot in the actual figure
+    K = 100
+    actual_phase_offset = 45.0
+    qam128 = qam128_new()
+
+    signal_stream = np.random.choice(qam128, K)
+    received_stream = get_received_stream(signal_stream, actual_phase_offset, snr)
+
+    theta_vals = np.linspace(0,90,361)
+    log_likelihood_vals = get_log_likelihood_arr(qam128, received_stream, snr, theta_vals)
+
+    plt.title(f"Typical Log-Likelihood Function for 128-QAM Constellation ($\\theta$ = {actual_phase_offset} degrees)")
+    plt.ylabel("Log-likelihood")
+    plt.xlabel("Theta in degrees")
+    plt.xlim(0,90)
+    plt.plot(theta_vals, log_likelihood_vals)
+
+    plt.show()
+
+# Not a Fig, Graphs log-likelihood function for 128-QAM constellation at 2 degree increments and 2nd order newton's guess
+def graph_ml_estimator():
+    qam128 = qam128_new()
+
+    true_offset, snr, received_stream = stream128_from_sample("received1 low", 100) # Read 100 vals of received stream from qam128_samples
+
+    theta_vals = np.arange(0,91,2)
+    log_likelihood_vals = get_log_likelihood_arr(qam128, received_stream, snr, theta_vals)
+
+    best_theta_guess = theta_vals[np.argmax(log_likelihood_vals)]
+
+    plt.title("Log-Likelihood at $2^{\\circ}$ Increments")
+    plt.ylabel("Log-Likelihood")
+    plt.xlabel("Theta in degrees")
+    plt.xlim(0,90)
+    plt.scatter(theta_vals, log_likelihood_vals)
+    plt.scatter(best_theta_guess, log_likelihood_vals.max())
+
+    print(f"True Phase Offset: {true_offset}")
+    print(f"Best Theta Guess: {best_theta_guess}")
+
+def graph_ml_estimator_with_newtons():
+    qam = qam128_new()
+    phase_offset, snr, received_stream = stream128_from_sample("received1 low", 100)
+
+    theta_vals = np.linspace(0,90,361) # Looking at many more values than will be considered in the ML algorithm
+    ll_vals = get_log_likelihood_arr(qam, received_stream, snr, theta_vals)
+
+    best_estimate = theta_vals[np.argmax(ll_vals[::8]) * 8] # Only look at every 2 degrees as this is how the ML algorithm works
+    new_best_estimate = second_order_newtons_method(qam, received_stream, snr, best_estimate)
+
+    ll_new_best = get_log_likelihood(qam, received_stream, snr, best_estimate)
+
+    fig, axs = plt.subplots(1,2)
+    fig.set_size_inches(10,5)
+    wide_fig, zoom_fig = axs
+
+    wide_fig.set_title("ML with Newton's Method Applied")
+    wide_fig.set_ylabel("Log-Likelihood")
+    wide_fig.set_xlabel("Theta in degrees")
+    wide_fig.set_xlim(0,90)
+    wide_fig.plot(theta_vals, ll_vals)
+    wide_fig.scatter(theta_vals[::8], ll_vals[::8])
+    wide_fig.scatter(best_estimate, ll_vals[::8].max(), zorder=3)
+    wide_fig.scatter(new_best_estimate, ll_new_best, marker="x", s=16, c="cyan", zorder=4)
+
+    zoom_fig.set_title("ML with Newton's Method Applied (Zoomed in)")
+    zoom_fig.set_ylabel("Log-Likelihood")
+    zoom_fig.set_xlabel("Theta in degrees")
+    zoom_fig.set_xlim(10,20)
+    zoom_fig.plot(theta_vals[40:81], ll_vals[40:81])
+    zoom_fig.scatter(theta_vals[40:81:8], ll_vals[40:81:8])
+    zoom_fig.scatter(best_estimate, ll_vals[::8].max(), zorder=3)
+    zoom_fig.scatter(new_best_estimate, ll_new_best, marker="x", c="cyan", zorder=4)
+
+    fig.show()
+
+    print(f"Actual Phase Offset: {phase_offset}")
+    print(f"Best Rough Estimate: {best_estimate}")
+    print(f"Best Guess with Newton's Method: {new_best_estimate}")
