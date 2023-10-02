@@ -185,7 +185,7 @@ def log_likelihood_demonstration(qam, noise, sent_stream, snr, phase_offset, the
 
     fig.set_size_inches(10,5)
 
-    signals_fig.set_title(f"Received Signals ($\\theta$ = {phase_offset} degrees")
+    signals_fig.set_title(f"Received Signals ($\\theta$ = {phase_offset} degrees)")
     signals_fig.set_xlim(-1.5, 1.5)
     signals_fig.set_ylim(-1.5, 1.5)
     signals_fig.scatter(received_stream.real, received_stream.imag, marker="+", s=16)
@@ -247,6 +247,7 @@ def graph_ml_estimator():
     print(f"True Phase Offset: {true_offset}")
     print(f"Best Theta Guess: {best_theta_guess}")
 
+# Not a Fig, graphs a closer look at how Newton's method improves the phase offset estimate
 def graph_ml_estimator_with_newtons():
     qam = qam128_new()
     phase_offset, snr, received_stream = stream128_from_sample("received1 low", 100)
@@ -257,7 +258,7 @@ def graph_ml_estimator_with_newtons():
     best_estimate = theta_vals[np.argmax(ll_vals[::8]) * 8] # Only look at every 2 degrees as this is how the ML algorithm works
     new_best_estimate = second_order_newtons_method(qam, received_stream, snr, best_estimate)
 
-    ll_new_best = get_log_likelihood(qam, received_stream, snr, best_estimate)
+    ll_new_best = get_log_likelihood(qam, received_stream, snr, new_best_estimate)
 
     fig, axs = plt.subplots(1,2)
     fig.set_size_inches(10,5)
@@ -270,7 +271,7 @@ def graph_ml_estimator_with_newtons():
     wide_fig.plot(theta_vals, ll_vals)
     wide_fig.scatter(theta_vals[::8], ll_vals[::8])
     wide_fig.scatter(best_estimate, ll_vals[::8].max(), zorder=3)
-    wide_fig.scatter(new_best_estimate, ll_new_best, marker="x", s=16, c="cyan", zorder=4)
+    wide_fig.scatter(new_best_estimate, ll_new_best, marker="x", s=16, c="green", zorder=4)
 
     zoom_fig.set_title("ML with Newton's Method Applied (Zoomed in)")
     zoom_fig.set_ylabel("Log-Likelihood")
@@ -279,10 +280,58 @@ def graph_ml_estimator_with_newtons():
     zoom_fig.plot(theta_vals[40:81], ll_vals[40:81])
     zoom_fig.scatter(theta_vals[40:81:8], ll_vals[40:81:8])
     zoom_fig.scatter(best_estimate, ll_vals[::8].max(), zorder=3)
-    zoom_fig.scatter(new_best_estimate, ll_new_best, marker="x", c="cyan", zorder=4)
+    zoom_fig.scatter(new_best_estimate, ll_new_best, marker="x", c="green", zorder=4)
 
     fig.show()
 
     print(f"Actual Phase Offset: {phase_offset}")
     print(f"Best Rough Estimate: {best_estimate}")
     print(f"Best Guess with Newton's Method: {new_best_estimate}")
+
+# Displays Figs 4-7
+# Graphs the precalculated results of the ML estimator algorithm
+def graph_ml_results():
+    fig, axs = plt.subplots(4)
+    fig.set_size_inches(5,20)
+    ml32_fig, ml64_fig, ml128_fig, ml256_fig = axs
+
+    def plot_ml_data(qam_size, ml_data, ml_fig):
+        k_lo = ml_data["K"][0:10]
+        k_hi = ml_data["K"][10:20]
+        snr_lo = ml_data["SNR"][0]
+        snr_hi = ml_data["SNR"][10]
+        mean_sq_err_lo = ml_data["ML Results"][0:10]
+        mean_sq_err_hi = ml_data["ML Results"][10:20]
+
+        k_vals = np.arange(10,101,1)
+        crb_lo = 1 / (2 * linearize_dB(snr_lo) * k_vals)
+        crb_hi = 1 / (2 * linearize_dB(snr_hi) * k_vals)
+
+        ml_fig.plot(k_vals, crb_lo)
+        ml_fig.plot(k_vals, crb_hi)
+        ml_fig.scatter(k_lo, mean_sq_err_lo, marker="x")
+        ml_fig.scatter(k_hi, mean_sq_err_hi, marker="x")
+
+        ml_fig.set_title(f"ML Estimation Performance for {qam_size}-QAM")
+        ml_fig.set_ylabel("MSE in degrees squared")
+        ml_fig.set_xlabel("Vector Length")
+        ml_fig.set_xticks([10,20,30,40,50,60,70,80,90,100])
+        ml_fig.set_xlim(10,100)
+        ml_fig.set_yscale("log")
+        ml_fig.grid(which="both")
+        ml_fig.legend([f"CRB fo {snr_lo} dB", f"CRB for {snr_hi} dB", f"Simulation Results for {snr_lo} dB", f"Simulation Results for {snr_hi} dB"])
+
+        return ml_fig
+
+    ml32_data = pd.read_csv("data/qam32_ML_results.csv")
+    ml64_data = pd.read_csv("data/qam64_ML_results.csv")
+    ml128_data = pd.read_csv("data/qam128_ML_results.csv")
+    ml256_data = pd.read_csv("data/qam256_ML_results.csv")
+
+    ml32_fig = plot_ml_data(32, ml32_data, ml32_fig)
+    ml64_fig = plot_ml_data(64, ml64_data, ml64_fig)
+    ml128_fig = plot_ml_data(128, ml128_data, ml128_fig)
+    ml256_fig = plot_ml_data(256, ml256_data, ml256_fig)
+
+    fig.show()
+
