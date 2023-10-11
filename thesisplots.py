@@ -33,6 +33,41 @@ def graph_unscaled_qam_constellations():
 
     fig.show()
 
+# Not a Fig, graphs effects of 45 degree phase offset on a sine wave and a 64-QAM constellation
+def graph_phase_offset_effects():
+    phase_offset = 45.0 # degrees
+
+    time_vals = np.linspace(0, 2*np.pi)
+    phase_off_good = np.sin(time_vals)                           # No phase offset
+    phase_off_err = np.sin(time_vals + np.radians(phase_offset)) # Phase offset
+    qam64_good = qam64unscaled_new()                             # QAM signals as normal
+    qam64_err = rotated(qam64_good, phase_offset)                # QAM signals with rotation caused by phase offset
+
+    fig, axs = plt.subplots(2,2)
+    fig.set_size_inches(10,10)
+    phase_off_good_fig, phase_off_err_fig = axs[0]
+    qam64_good_fig, qam64_err_fig = axs[1]
+
+    phase_off_good_fig.set_title("No Phase Offset")
+    phase_off_good_fig.grid()
+    phase_off_good_fig.plot(time_vals, phase_off_good)
+    phase_off_good_fig.plot(time_vals, phase_off_good)
+
+    phase_off_err_fig.set_title(f"{phase_offset} degree Phase Offset")
+    phase_off_err_fig.grid()
+    phase_off_err_fig.plot(time_vals, phase_off_good)
+    phase_off_err_fig.plot(time_vals, phase_off_err)
+
+    qam64_good_fig.set_title("64-QAM Received Signals No Phase Offset")
+    qam64_good_fig.grid()
+    qam64_good_fig.scatter(qam64_good.real, qam64_good.imag, marker='+')
+
+    qam64_err_fig.set_title(f"64-QAM Received Signals ($\\theta = {phase_offset}$ degrees)")
+    qam64_err_fig.grid()
+    qam64_err_fig.scatter(qam64_err.real, qam64_err.imag, marker='+', s=16, c="orange")
+
+    fig.show()
+
 # Not a fig
 # Display constellation for different phase offsets
 def phase_offset_demonstration(qam, t_vals, sent_wave, phase_offset_deg):
@@ -152,13 +187,13 @@ def snr_demonstration(qam, snr):
 #         snr - interactive variable, SNR in dB
 #  output: None, displays plot of CRB
 def crb_demonstration(k_vals, snr):
-    crb_vals = 1 / (2 * k_vals * linearize_dB(snr))
+    crb_vals = rad2_to_deg2(get_crb(snr, k_vals))
 
     plt.title(f"Cramer-Rao Lower Bound ($\\gamma$ = {snr})")
     plt.ylabel("Mean Squared Error (MSE) in degrees$^2$")
     plt.xlabel("Vector Length (K)")
     plt.xlim(10,100)
-    plt.ylim(1e-6, 1e-3)
+    plt.ylim(1e-2, 1e2)
     plt.yscale("log")
     plt.grid(which="both")
     plt.plot(k_vals, crb_vals)
@@ -171,17 +206,17 @@ def crb_demonstration(k_vals, snr):
 #         sent_stream - np array of all signals from QAM that were sent. Used to calculate received signals
 #         snr - SNR used to calculate noise. Fixed in this function
 #         phase_offset - the actual phase offset of the data in degrees
-#         theta_guess - the angle to correct the received stream by to see the affect of different correction angles
+#         theta_guess - the angle to correct the received stream by to see the affect of different correction angles in degrees
 #  output: None, displays a plot of both the data received and the log-likelihood
 def log_likelihood_demonstration(qam, noise, sent_stream, snr, phase_offset, theta_guess):
     received_stream = rotated(sent_stream, phase_offset) + noise
     corrected_stream = rotated(received_stream, -theta_guess)
 
     theta_vals = np.arange(0,91,2)
-    log_likelihood_vals = get_log_likelihood_arr(qam, received_stream, QAM32_SNR_LOW, theta_vals)
+    ll_vals = get_log_likelihood_arr(qam, received_stream, snr, theta_vals)
 
     fig, axs = plt.subplots(1,2)
-    signals_fig, log_likelihood_fig = axs
+    signals_fig, ll_fig = axs
 
     fig.set_size_inches(10,5)
 
@@ -193,12 +228,12 @@ def log_likelihood_demonstration(qam, noise, sent_stream, snr, phase_offset, the
     signals_fig.scatter(qam.real, qam.imag, marker="+", s=16)
     signals_fig.legend(["Received Signals", f"Corrected by {theta_guess} deg", "32-QAM Symbols"], bbox_to_anchor=[.5,-.1])
 
-    log_likelihood_fig.set_title(f"Log-Likelihood Function for 32-QAM Constellation")
-    log_likelihood_fig.set_ylabel("Log-likelihood")
-    log_likelihood_fig.set_xlabel("Theta in degrees")
-    log_likelihood_fig.set_xlim(0,90)
-    log_likelihood_fig.plot(theta_vals, log_likelihood_vals, zorder=1)
-    log_likelihood_fig.scatter(theta_guess, get_log_likelihood(qam, received_stream, snr, theta_guess), c="orange", zorder=2)
+    ll_fig.set_title(f"Log-Likelihood Function for 32-QAM Constellation")
+    ll_fig.set_ylabel("Log-likelihood")
+    ll_fig.set_xlabel("Theta in degrees")
+    ll_fig.set_xlim(0,90)
+    ll_fig.plot(theta_vals, ll_vals, zorder=1)
+    ll_fig.scatter(theta_guess, get_log_likelihood(qam, received_stream, snr, theta_guess), c="orange", zorder=2)
 
     fig.show()
 
@@ -230,7 +265,7 @@ def graph_log_likelihood():
 def graph_ml_estimator():
     qam128 = qam128_new()
 
-    true_offset, snr, received_stream = stream128_from_sample("received1 low", 100) # Read 100 vals of received stream from qam128_samples
+    true_offset, snr, received_stream = stream128_from_sample("Received 1 Low", 100) # Read 100 vals of received stream from qam128_samples
 
     theta_vals = np.arange(0,91,2)
     log_likelihood_vals = get_log_likelihood_arr(qam128, received_stream, snr, theta_vals)
@@ -250,13 +285,13 @@ def graph_ml_estimator():
 # Not a Fig, graphs a closer look at how Newton's method improves the phase offset estimate
 def graph_ml_estimator_with_newtons():
     qam = qam128_new()
-    phase_offset, snr, received_stream = stream128_from_sample("received1 low", 100)
+    phase_offset, snr, received_stream = stream128_from_sample("Received 1 Low", 100)
 
     theta_vals = np.linspace(0,90,361) # Looking at many more values than will be considered in the ML algorithm
     ll_vals = get_log_likelihood_arr(qam, received_stream, snr, theta_vals)
 
     best_estimate = theta_vals[np.argmax(ll_vals[::8]) * 8] # Only look at every 2 degrees as this is how the ML algorithm works
-    new_best_estimate = second_order_newtons_method(qam, received_stream, snr, best_estimate)
+    new_best_estimate = second_order_newtons_method_ml(qam, received_stream, snr, best_estimate)
 
     ll_new_best = get_log_likelihood(qam, received_stream, snr, new_best_estimate)
 
@@ -295,17 +330,22 @@ def graph_ml_results():
     fig.set_size_inches(5,20)
     ml32_fig, ml64_fig, ml128_fig, ml256_fig = axs
 
-    def plot_ml_data(qam_size, ml_data, ml_fig):
+    def plot_ml_data(qam_size, ml_data, ml_fig, y_lo, y_hi):
         k_lo = ml_data["K"][0:10]
         k_hi = ml_data["K"][10:20]
         snr_lo = ml_data["SNR"][0]
         snr_hi = ml_data["SNR"][10]
-        mean_sq_err_lo = ml_data["ML Results"][0:10]
-        mean_sq_err_hi = ml_data["ML Results"][10:20]
+        mean_sq_err_lo = np.array(ml_data["ML Results"][0:10])
+        mean_sq_err_hi = np.array(ml_data["ML Results"][10:20])
 
         k_vals = np.arange(10,101,1)
-        crb_lo = 1 / (2 * linearize_dB(snr_lo) * k_vals)
-        crb_hi = 1 / (2 * linearize_dB(snr_hi) * k_vals)
+        crb_lo = get_crb(snr_lo, k_vals)
+        crb_hi = get_crb(snr_hi, k_vals)
+
+        crb_lo = rad2_to_deg2(crb_lo)
+        crb_hi = rad2_to_deg2(crb_hi)
+        mean_sq_err_lo = rad2_to_deg2(mean_sq_err_lo)
+        mean_sq_err_hi = rad2_to_deg2(mean_sq_err_hi)
 
         ml_fig.plot(k_vals, crb_lo)
         ml_fig.plot(k_vals, crb_hi)
@@ -317,6 +357,7 @@ def graph_ml_results():
         ml_fig.set_xlabel("Vector Length")
         ml_fig.set_xticks([10,20,30,40,50,60,70,80,90,100])
         ml_fig.set_xlim(10,100)
+        ml_fig.set_ylim(y_lo, y_hi)
         ml_fig.set_yscale("log")
         ml_fig.grid(which="both")
         ml_fig.legend([f"CRB fo {snr_lo} dB", f"CRB for {snr_hi} dB", f"Simulation Results for {snr_lo} dB", f"Simulation Results for {snr_hi} dB"])
@@ -328,10 +369,151 @@ def graph_ml_results():
     ml128_data = pd.read_csv("data/qam128_ML_results.csv")
     ml256_data = pd.read_csv("data/qam256_ML_results.csv")
 
-    ml32_fig = plot_ml_data(32, ml32_data, ml32_fig)
-    ml64_fig = plot_ml_data(64, ml64_data, ml64_fig)
-    ml128_fig = plot_ml_data(128, ml128_data, ml128_fig)
-    ml256_fig = plot_ml_data(256, ml256_data, ml256_fig)
+    ml32_fig = plot_ml_data(32, ml32_data, ml32_fig, 1e-2, 1e2)
+    ml64_fig = plot_ml_data(64, ml64_data, ml64_fig, 1e-2, 1e2)
+    ml128_fig = plot_ml_data(128, ml128_data, ml128_fig, 1e-2, 1e2)
+    ml256_fig = plot_ml_data(256, ml256_data, ml256_fig, 1e-3, 1e2)
 
     fig.show()
 
+# Not a Fig, used as an interactive plot
+#  input: symbol - which symbol to use to show nearby energy levels [1,8]
+#         p - how many nearby energy levels to highlight [0,5]
+#  output: None, displays a scatterplot of 256-QAM constellation with nearby energy levels highlighted
+def energy_levels_demonstration(symbol, p):
+    qam256 = qam256_new()
+    sml_qam256, energies = sml_qam256_new()
+    received_symbol = qam256[136 + 17*(symbol-1)] # Chooses point along 45 degree diagonal going up and right from the center
+    energy_level = get_closest_energy_level(energies, received_symbol)
+
+    plt.scatter(qam256.real, qam256.imag, marker="+", c="pink", zorder=1) # Base 256-QAM
+    plt.scatter(sml_qam256[energy_level].real, sml_qam256[energy_level].imag, marker="+", c="green", zorder=3) # Symbols on the same energy level 
+    plt.scatter(received_symbol.real, received_symbol.imag, marker="+", c="blue", zorder=4) # The actual symbol chosen based on the symbol parameter
+
+    # Highlight all nearby energy levels in red
+    for i in range(1,p+1):
+        below = max(energy_level - i, 0)
+        above = min(energy_level + i, len(sml_qam256) - 1)
+        plt.scatter(sml_qam256[below].real, sml_qam256[below].imag, marker="+", c="red", zorder=2)
+        plt.scatter(sml_qam256[above].real, sml_qam256[above].imag, marker="+", c="red", zorder=2)
+
+    plt.legend(["256-QAM Symbols", "Same Energy Level", "Received Symbol", "Similar Energy Level"], bbox_to_anchor=[.5,-.1])
+
+
+    plt.title("Symbols Involved in Suboptimal Log-Likelihood Calculation")
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    plt.grid()
+
+    plt.show()
+
+# Not a Fig, graphs the ML log-likelihood and SML log-likelihoods for the same received stream side by side to show the difference
+def graph_both_log_likelihoods():
+    qam256 = qam256_new()
+    sml_qam256, energies = sml_qam256_new()
+    _phase_offset, snr, received_stream = stream256_from_sample("Received 1 Low", 40)
+    
+    theta_vals = np.linspace(0,90,91)
+    ml_ll_vals = get_log_likelihood_arr(qam256, received_stream, snr, theta_vals)
+    sml_ll_vals = get_sml_log_likelihood_arr(sml_qam256, energies, received_stream, snr, theta_vals, 3)
+
+    fig, axs = plt.subplots(1,2)
+    fig.set_size_inches(10,5)
+    ml_fig, sml_fig = axs
+
+    ml_fig.set_title("Log-Likelihood for ML Estimation")
+    ml_fig.set_ylabel("Log-Likelihood")
+    ml_fig.set_xlabel("Theta in degrees")
+    ml_fig.set_xlim(0,90)
+    ml_fig.plot(theta_vals, ml_ll_vals)
+    
+    sml_fig.set_title("Log-Likelihood for SML Estimation ($p=3$)")
+    sml_fig.set_xlabel("Theta in degrees")
+    sml_fig.set_xlim(0,90)
+    sml_fig.plot(theta_vals, sml_ll_vals)
+   
+    fig.show()
+
+# Not a Fig, used as an interactive graph
+# Plots the suboptimal log-likelihood for various values of p
+def sml_p_demonstration(p):
+    sml_qam128, energies = sml_qam128_new()
+    _phase_offset, snr, received_stream = stream128_from_sample("Received 1 Low", 40)
+    
+    theta_vals = np.linspace(0,90,361)
+    sml_ll_vals = get_sml_log_likelihood_arr(sml_qam128, energies, received_stream, snr, theta_vals, p)
+
+    plt.title(f"Suboptimal Log-Likelihood ($p={p}$)")
+    plt.ylabel("Log-Likelihood")
+    plt.xlabel("Theta in degrees")
+    plt.xlim(0,90)
+    plt.plot(theta_vals, sml_ll_vals)
+   
+    plt.show()
+
+
+# Displays Figs 8-14
+# Graphs the precalculated results of the ML estimator algorithm
+def graph_sml_results():
+    fig, axs = plt.subplots(7,1)
+    fig.set_size_inches(5,35)
+    sml32_p0_fig = axs[0]
+    sml32_p1_fig = axs[1]
+    sml64_p1_fig = axs[2]
+    sml128_p1_fig = axs[3]
+    sml128_p2_fig = axs[4]
+    sml256_p2_fig = axs[5]
+    sml256_p3_fig = axs[6]
+
+    def plot_sml_data(qam_size, sml_data, sml_fig, p, y_lo, y_hi):
+        k_lo = sml_data["K"][0:10]
+        k_hi = sml_data["K"][10:20]
+        snr_lo = sml_data["SNR"][0]
+        snr_hi = sml_data["SNR"][10]
+        mean_sq_err_lo = np.array(sml_data["SML Results"][0:10])
+        mean_sq_err_hi = np.array(sml_data["SML Results"][10:20])
+
+        k_vals = np.arange(10,101,1)
+        crb_lo = get_crb(snr_lo, k_vals)
+        crb_hi = get_crb(snr_hi, k_vals)
+
+        crb_lo = rad2_to_deg2(crb_lo)
+        crb_hi = rad2_to_deg2(crb_hi)
+        mean_sq_err_lo = rad2_to_deg2(mean_sq_err_lo)
+        mean_sq_err_hi = rad2_to_deg2(mean_sq_err_hi)
+
+        sml_fig.plot(k_vals, crb_lo)
+        sml_fig.plot(k_vals, crb_hi)
+        sml_fig.scatter(k_lo, mean_sq_err_lo, marker="x")
+        sml_fig.scatter(k_hi, mean_sq_err_hi, marker="x")
+
+        sml_fig.set_title(f"Suboptimal ML Estimation Performance for {qam_size}-QAM, p={p}")
+        sml_fig.set_ylabel("MSE in degrees squared")
+        sml_fig.set_xlabel("Vector Length")
+        sml_fig.set_xticks([10,20,30,40,50,60,70,80,90,100])
+        sml_fig.set_xlim(10,100)
+        sml_fig.set_ylim(y_lo, y_hi)
+        sml_fig.set_yscale("log")
+        sml_fig.grid(which="both")
+        sml_fig.legend([f"CRB fo {snr_lo} dB", f"CRB for {snr_hi} dB", f"Simulation Results for {snr_lo} dB", f"Simulation Results for {snr_hi} dB"])
+
+        return sml_fig
+
+    sml32_p0_data = pd.read_csv("data/qam32_SML_p0_results.csv")
+    sml32_p1_data = pd.read_csv("data/qam32_SML_p1_results.csv")
+    sml64_p1_data = pd.read_csv("data/qam64_SML_p1_results.csv")
+    sml128_p1_data = pd.read_csv("data/qam128_SML_p1_results.csv")
+    sml128_p2_data = pd.read_csv("data/qam128_SML_p2_results.csv")
+    sml256_p2_data = pd.read_csv("data/qam256_SML_p2_results.csv")
+    sml256_p3_data = pd.read_csv("data/qam256_SML_p3_results.csv")
+
+    sml32_p0_fig = plot_sml_data(32, sml32_p0_data, sml32_p0_fig, 0, 1e-2, 1e3)
+    sml32_p1_fig = plot_sml_data(32, sml32_p1_data, sml32_p1_fig, 1, 1e-2, 1e2)
+    sml32_p0_fig = plot_sml_data(64, sml64_p1_data, sml64_p1_fig, 1, 1e-2, 1e3)
+    sml32_p0_fig = plot_sml_data(128, sml128_p1_data, sml128_p1_fig, 1, 1e-2, 1e3)
+    sml32_p0_fig = plot_sml_data(128, sml128_p2_data, sml128_p2_fig, 2, 1e-2, 1e3)
+    sml32_p0_fig = plot_sml_data(256, sml256_p2_data, sml256_p2_fig, 2, 1e-3, 1e3)
+    sml32_p0_fig = plot_sml_data(256, sml256_p3_data, sml256_p3_fig, 3, 1e-3, 1e3)
+
+    fig.tight_layout()
+    fig.show()
