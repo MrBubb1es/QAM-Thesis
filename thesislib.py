@@ -15,6 +15,17 @@ QAM64_SNR_HIGH = 27.0
 QAM128_SNR_HIGH = 30.0
 QAM256_SNR_HIGH = 33.0
 
+# B1 and B2 constants for all QAM sizes
+QAM32_ADDITIVE_NOISE_C = 52.631578947368574
+QAM32_SELF_NOISE_C = 3.1412742382271563
+QAM64_ADDITIVE_NOISE_C = 5.8081149619611185
+QAM64_SELF_NOISE_C = 0.16737109044801363
+
+QAM128_ADDITIVE_NOISE_C = 62.06745498521905
+QAM128_SELF_NOISE_C = 3.792915882827198
+QAM256_ADDITIVE_NOISE_C = 6.268452209723086
+QAM256_SELF_NOISE_C = 0.2019409832094356
+
 # Generate a new 32-QAM constellation with arbitrary scale
 def qam32unscaled_new():
     # 6x6 square of points placed 1 unit apart
@@ -324,6 +335,22 @@ def symbol_err_prob(N, snr):
 #  output: The cramer rao bound for the specified values in radians^2
 def get_crb(snr, k):
     return 1.0 / (2.0 * linearize_dB(snr) * k)
+
+def calculate_B1(qam, P):
+    expected_val1 = np.mean( np.abs(qam**2) )
+    expected_val2 = np.mean( np.abs(qam**2)**(P-1) )
+    expected_val3 = np.abs( np.mean(qam**P) )**2
+    
+    return expected_val1 * expected_val2 / expected_val3
+
+def calculate_B2(qam, P):
+    expected_val1 = np.mean( qam**P )
+    expected_val2 = np.mean( np.abs(qam**2)**P )
+    expected_val3 = np.mean( np.conjugate(qam)**(2*P) )
+    expected_val4 = np.mean( np.conjugate(qam)**P )
+    expected_val5 = np.mean( qam**(2*P) )
+    
+    return ((2 * np.abs(expected_val1)**2 * expected_val2 - expected_val1**2 * expected_val3 - expected_val4**2 * expected_val5) / (4 * P**2 * np.abs(expected_val1)**4)).real
 
 def get_received_stream(sent_stream, phase_offset_deg, snr):
     K = len(sent_stream)

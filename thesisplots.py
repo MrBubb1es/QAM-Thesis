@@ -517,3 +517,95 @@ def graph_sml_results():
 
     fig.tight_layout()
     fig.show()
+
+# Displays Fig. 15
+# Plots a 256-QAM constellation raised to the 4th power and multiplied by -1
+def plot_qam_4th_pow():
+    qam = qam256_new()**4 * -1
+
+    plt.xlim(-2, 8)
+    plt.ylim(-3, 3)
+    plt.grid()
+    plt.title("The 256-QAM Constellation Raised to the 4th Power, Multiplied by -1")
+    plt.scatter(qam.real, qam.imag, marker="+")
+
+    plt.show()
+
+# Not a fig
+# Display constellation and 4th power for different phase offsets
+def pl_offset_demonstration(qam, phase_offset_deg):
+    received_qam = rotated(qam, phase_offset_deg)
+    received_qam_pow4 = received_qam**4 * -1
+    
+    fig, axs = plt.subplots(1,2)
+    fig.set_size_inches(10,5)
+
+    qam_fig, pow_fig = axs
+
+    qam_fig.set_title(f"256-QAM Received Signals ($\\theta = {phase_offset_deg}$ degrees)")
+    qam_fig.grid()
+    qam_fig.scatter(qam.real, qam.imag, marker='+', s=16)
+    qam_fig.scatter(received_qam.real, received_qam.imag, marker='+', s=16)
+
+    pow_fig.set_title(f"256-QAM Received Signals Raised to the\n4th Power, Multiplied by -1")
+    pow_fig.set_xlim(-7.5,7.5)
+    pow_fig.set_ylim(-7.5,7.5)
+    pow_fig.grid()
+    pow_fig.scatter(received_qam_pow4.real, received_qam_pow4.imag, marker='+', s=16)
+
+    plt.show()
+
+def graph_pl_results():
+    fig, axs = plt.subplots(4,1)
+    fig.set_size_inches(7,28)
+    pl32_fig, pl64_fig = axs[0], axs[1]
+    pl128_fig, pl256_fig = axs[2], axs[3]
+
+    def plot_pl_data(qam_size, pl_data, pl_fig, y_lo, y_hi, anc, snc):
+        k_lo = pl_data["K"][0:60]
+        k_hi = pl_data["K"][60:120]
+        snr_lo = pl_data["SNR"][0]
+        snr_hi = pl_data["SNR"][60]
+        mean_sq_err_lo = np.array(pl_data["PL Results"][0:60])
+        mean_sq_err_hi = np.array(pl_data["PL Results"][60:120])
+
+        k_vals = np.arange(10,601,10)
+        crb_lo = get_crb(snr_lo, k_vals)
+        crb_hi = get_crb(snr_hi, k_vals)
+
+        crb_lo = rad2_to_deg2(crb_lo)
+        crb_hi = rad2_to_deg2(crb_hi)
+        mean_sq_err_lo = rad2_to_deg2(mean_sq_err_lo)
+        mean_sq_err_hi = rad2_to_deg2(mean_sq_err_hi)
+
+        mse_approx_hi = rad2_to_deg2( anc * get_crb(snr_hi, k_vals) + snc / k_vals )
+
+        pl_fig.plot(k_vals, crb_lo)
+        pl_fig.plot(k_vals, crb_hi)
+        pl_fig.plot(k_vals, mse_approx_hi)
+        pl_fig.scatter(k_lo, mean_sq_err_lo, marker="x")
+        pl_fig.scatter(k_hi, mean_sq_err_hi, marker="x")
+
+        pl_fig.set_title(f"Power Law Estimation Performance for {qam_size}-QAM, No Threshholding")
+        pl_fig.set_ylabel("MSE in degrees squared")
+        pl_fig.set_xlabel("Vector Length")
+        pl_fig.set_xticks([0,100,200,300,400,500,600])
+        pl_fig.set_xlim(0,600)
+        pl_fig.set_yscale("log")
+        pl_fig.set_ylim(y_lo, y_hi)
+        pl_fig.grid(which="both")
+        pl_fig.legend([f"CRB for {snr_lo} dB", f"CRB for {snr_hi} dB", f"MSE Approximation for {snr_hi} dB", f"Simulation Results for {snr_lo} dB", f"Simulation Results for {snr_hi} dB"], loc="upper right")
+
+        return pl_fig
+
+    pl32_data = pd.read_csv("data/qam32_PL_results.csv")
+    pl64_data = pd.read_csv("data/qam64_PL_results.csv")
+    pl128_data = pd.read_csv("data/qam128_PL_results.csv")
+    pl256_data = pd.read_csv("data/qam256_PL_results.csv")
+
+    pl32_fig = plot_pl_data(32, pl32_data, pl32_fig, 1e-2, 1e4, QAM32_ADDITIVE_NOISE_C, QAM32_SELF_NOISE_C)
+    pl64_fig = plot_pl_data(64, pl64_data, pl64_fig, 1e-3, 1e3, QAM64_ADDITIVE_NOISE_C, QAM64_SELF_NOISE_C)
+    pl128_fig = plot_pl_data(128, pl128_data, pl128_fig, 1e-3, 1e4, QAM128_ADDITIVE_NOISE_C, QAM128_SELF_NOISE_C)
+    pl256_fig = plot_pl_data(256, pl256_data, pl256_fig, 1e-3, 1e3, QAM256_ADDITIVE_NOISE_C, QAM256_SELF_NOISE_C)
+
+    plt.show()
